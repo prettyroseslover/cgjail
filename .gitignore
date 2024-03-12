@@ -1,2 +1,3 @@
-gatherConfig.toml
+cgjailConfig.toml
 models/
+__pycache__/
