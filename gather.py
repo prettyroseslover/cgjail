@@ -1,0 +1,3 @@
+import tomli
+
+print("Ciao!")
