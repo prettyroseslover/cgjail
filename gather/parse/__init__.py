@@ -17,3 +17,5 @@ parser = CustomArgumentParser(description='Script to prepare data and train kNN-
 parser.add_argument('-p', '--pid', required=True, type=pid, help='PID of a process')
 
 args = parser.parse_args()
+
+pid = args.pid
