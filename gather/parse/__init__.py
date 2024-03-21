@@ -21,7 +21,7 @@ def positive_int(x):
 
 parser = CustomArgumentParser(description='Script to prepare data and train kNN-model for a given process')
 parser.add_argument('-p', '--pid', required=True, type=pid, help='PID of a process')
-parser.add_argument('-T', '--period', default=5, type=positive_int, help='Survey period in seconds')
+parser.add_argument('-T', '--period', default=0, type=positive_int, help='Survey period in seconds')
 parser.add_argument('-d', '--docile', default=50, type=positive_int, help='Number of data point to gather per docile process')
 parser.add_argument('-n', '--naughty', default=50, type=positive_int, help='Number of data point to gather per naughty process')
 parser.add_argument('-v', '--verbosity', action = "store_true")
