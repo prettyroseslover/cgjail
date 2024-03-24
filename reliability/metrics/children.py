@@ -16,3 +16,6 @@ def children(pid):
 
     return all_children
 
+
+def number_of_children(pid):
+    return len(children(pid))
