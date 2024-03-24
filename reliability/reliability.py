@@ -9,7 +9,9 @@ if verbose:
     colored.print_cyan(f"==ON THE {args.step} STEP==")
 
 if args.step == 'train':
-    csv_file = args.input
+    from train import train_hard
+    input = args.input
+    train_hard()
     exit()
 
 process_class = int(args.step != 'docile')
