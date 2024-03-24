@@ -32,5 +32,6 @@ df = df_generator(pid, number, period, process_class)
 if verbose:
     print(df.head())
 
+
 df.to_csv(csv_file, index=False)
 colored.print_green(f"Results are written to {csv_file}")
