@@ -40,6 +40,13 @@ def csv_file(x):
     return x
 
 
+def odd(x):
+    x = positive_int(x)
+    if not x & 1: 
+        raise argparse.ArgumentTypeError(f'{x} must be odd')
+    return x
+
+
 parser = CustomArgumentParser(description='Script to prepare data and train kNN-model for a given piece of software')
 
 parser.add_argument('-v', '--verbosity', action = "store_true")
@@ -60,6 +67,7 @@ naughty_parser.add_argument('-n', '--number', default=50, type=positive_int, hel
 naughty_parser.add_argument('-o', '--output', required=True, type=csv_file, help='CSV file to append naughty data to')
 
 train_parser.add_argument('-i', '--input', required=True, type=csv_file, help='CSV file to train a model')
+train_parser.add_argument('-k', '--k-neighbour', default=None, type=odd, help='Odd number of K nearest neightbours')
 
 args = parser.parse_args()
 

@@ -3,15 +3,18 @@ sys.path.insert(0, '../') # how to beautify that?
 from parse import verbose, args
 from config import path_to_storage
 from colored_text import colored
-from gather import df_generator
 
 if verbose:
-    colored.print_cyan(f"==ON THE {args.step} STEP==")
+    colored.print_cyan(f"==ON THE {args.step.upper()} STEP==")
 
 if args.step == 'train':
-    from train import train_hard
+    from train import Model
     input = args.input
-    train_hard()
+    K = args.k_neighbour
+    kNN = Model(input, path_to_storage, K)
+    kNN.train_and_save()
+    if verbose:
+        colored.print_cyan(kNN.quality())
     exit()
 
 process_class = int(args.step != 'docile')
@@ -26,7 +29,7 @@ if verbose:
     colored.print_cyan("You've chosen process:")
     colored.print_cyan(f"{pid} {process_name}")
 
-
+from gather import df_generator
 df = df_generator(pid, number, period, process_class)
 
 if verbose:
