@@ -39,7 +39,7 @@ fn whether_to_monitor(process: &String, pattern: &mut Vec<String>) -> bool {
 
 
 fn main() {
-    println!("Repercussion Module");
+    
     // the path to config_file is hardcoded
     let config_file_path = Path::new("/home/prettyroseslover/Sync/4th year/Laurea/cgjail/config/cgjailConfig.toml");
 
@@ -52,10 +52,9 @@ fn main() {
     };
 
     let config: Config = toml::from_str(&config_file).unwrap();
-    println!("path to models: {:#?}", config.model_storage);
 
-    // Ищу модели
-    let entries = match fs::read_dir(config.model_storage) {
+    // Pickles made by Reliability
+    let entries = match fs::read_dir(&config.model_storage) {
         Ok(dir) => dir,
         Err(e) => {
             println!("\x1b[91mError: {:#?}\x1b[0m", e);
@@ -63,17 +62,12 @@ fn main() {
         }
     };
 
-    let filenames = entries.map(|entry| entry.unwrap().file_name().into_string().unwrap()).collect::<Vec<String>>();
+    let filenames: Vec<String> = entries.map(|entry| entry.unwrap().file_name().into_string().unwrap()).collect();
 
-    let mut pickles = filenames.iter().filter(|&filename| Path::new(&filename).extension().unwrap() == OsStr::new("pkl")).cloned().collect::<Vec<String>>();
+    let mut pickles:Vec<String> = filenames.iter().filter(|&filename| Path::new(&filename).extension().unwrap() == OsStr::new("pkl")).cloned().collect();
 
-    // println!("{:#?}", filenames);
-    // println!("{:#?}", pickles);
-    
-
-     
-    let entries = match fs::read_dir("/proc") {
-        Ok(dir) => dir.map(|e| e.unwrap().file_name().into_string().unwrap()).collect::<Vec<String>>(),
+    let entries: Vec<String> = match fs::read_dir("/proc") {
+        Ok(dir) => dir.map(|e| e.unwrap().file_name().into_string().unwrap()).collect(),
         Err(e) => {
             println!("\x1b[91mError: {:#?}\x1b[0m", e);
             std::process::exit(1)
@@ -81,16 +75,16 @@ fn main() {
     };
     
     // entries -> filter whether a number -> turn into a vec of pids
-    let running_processes = entries.iter()
+    let running_processes: Vec<u32> = entries.iter()
         .filter(|file| file.parse::<u32>().is_ok())
         .map(|pid| pid.parse::<u32>().unwrap())
-        .collect::<Vec<u32>>();
+        .collect();
 
     // map (pid: name) of processes to actually monitor
-    let monitoring_processes = running_processes.iter()
+    let monitoring_processes: HashMap<u32, String> = running_processes.iter()
         .map(|&pid| (pid, process_name(pid)))
         .filter(|(pid, process_name)| whether_to_monitor(process_name, &mut pickles))
-        .collect::<HashMap<u32, String>>();
+        .collect();
 
     println!("{:#?}", monitoring_processes);
     println!("{:#?}", pickles[0]);
