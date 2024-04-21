@@ -1,93 +1,166 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use color_eyre::{eyre::eyre, Report, Result};
+use serde::Deserialize;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::{Path, PathBuf};
-use serde::Deserialize;
-use toml;
 use std::io::{BufRead, BufReader};
-use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use toml;
+
+use pyo3::prelude::*;
+use pyo3::types::PyAny;
 
 #[derive(Deserialize, Debug)]
 struct Config {
-    model_storage: PathBuf
+    model_storage: PathBuf,
 }
 
-fn process_name(pid: u32) -> String{
-    let file = match fs::File::open(format!("/proc/{}/status", pid)) {
-        Ok(file) => file,
-        Err(_) => {
-            println!("\x1b[91mError: Unable to read a proc file\x1b[0m");
-            std::process::exit(1)
-        }
-    };
+fn process_name(pid: u32) -> Result<String> {
+    let file = fs::File::open(format!("/proc/{}/status", pid))?;
     let mut buffer = BufReader::new(file);
     let mut first_line = String::new();
-    let _ = buffer.read_line(&mut first_line);
-    return first_line.split_whitespace().collect::<Vec<_>>()[1].to_string();
+    let _ = buffer.read_line(&mut first_line)?;
+    let process_name = first_line
+        .split_whitespace()
+        .collect::<Vec<&str>>()
+        .get(1)
+        .ok_or(eyre!("no process name"))?
+        .to_string();
+    Ok(process_name)
 }
 
-fn process_to_monitor(pickle: &String) -> &str{
+fn process_to_monitor(pickle: &String) -> &str {
     return Path::new(pickle).file_stem().unwrap().to_str().unwrap();
 }
 
-fn whether_to_monitor(process: &String, pattern: &mut Vec<String>) -> bool {
-    let result: Vec<String> = pattern.iter().filter(|p| process.contains(process_to_monitor(p))).cloned().collect();
-    return !result.is_empty()
+fn whether_to_monitor(process: &String, pattern: &HashMap<usize, String>) -> bool {
+    let result: Vec<String> = pattern
+        .iter()
+        .map(|(_, p)| p)
+        .filter(|p| process.contains(process_to_monitor(p)))
+        .cloned()
+        .collect();
+    return !result.is_empty();
 }
 
-
-fn main() {
-    
-    // the path to config_file is hardcoded
-    let config_file_path = Path::new("/home/prettyroseslover/Sync/4th year/Laurea/cgjail/config/cgjailConfig.toml");
-
-    let config_file = match fs::read_to_string(config_file_path) {
-        Ok(s) => s,
-        Err(e) => {
-            println!("\x1b[91mError: {:#?}\x1b[0m", e);
-            std::process::exit(1)
+fn why_monitor(process: String, pattern: &HashMap<usize, String>) -> usize {
+    for (id, pickle) in pattern.into_iter() {
+        if process.contains(process_to_monitor(&pickle)) {
+            return *id;
         }
-    };
+    }
+    return 0;
+}
 
-    let config: Config = toml::from_str(&config_file).unwrap();
+fn which_to_monitor(pickles: &HashMap<usize, String>) -> Result<HashMap<u32, (String, usize)>> {
+    let entries: Vec<String> = fs::read_dir("/proc")?
+        .map(|e| {
+            Ok(e?
+                .file_name()
+                .into_string()
+                .map_err(|_| eyre!("entries from /proc"))?)
+        })
+        .collect::<Result<_>>()?;
 
-    // Pickles made by Reliability
-    let entries = match fs::read_dir(&config.model_storage) {
-        Ok(dir) => dir,
-        Err(e) => {
-            println!("\x1b[91mError: {:#?}\x1b[0m", e);
-            std::process::exit(1)
-        }
-    };
-
-    let filenames: Vec<String> = entries.map(|entry| entry.unwrap().file_name().into_string().unwrap()).collect();
-
-    let mut pickles:Vec<String> = filenames.iter().filter(|&filename| Path::new(&filename).extension().unwrap() == OsStr::new("pkl")).cloned().collect();
-
-    let entries: Vec<String> = match fs::read_dir("/proc") {
-        Ok(dir) => dir.map(|e| e.unwrap().file_name().into_string().unwrap()).collect(),
-        Err(e) => {
-            println!("\x1b[91mError: {:#?}\x1b[0m", e);
-            std::process::exit(1)
-        }
-    };
-    
     // entries -> filter whether a number -> turn into a vec of pids
-    let running_processes: Vec<u32> = entries.iter()
+    let running_processes: Vec<u32> = entries
+        .iter()
         .filter(|file| file.parse::<u32>().is_ok())
         .map(|pid| pid.parse::<u32>().unwrap())
         .collect();
 
     // map (pid: name) of processes to actually monitor
-    let monitoring_processes: HashMap<u32, String> = running_processes.iter()
-        .map(|&pid| (pid, process_name(pid)))
-        .filter(|(pid, process_name)| whether_to_monitor(process_name, &mut pickles))
+    let processes_to_monitor: HashMap<u32, (String, usize)> = running_processes
+        .iter()
+        .flat_map(|&pid| Ok::<_, Report>((pid, process_name(pid)?)))
+        .filter(|(pid, process_name)| whether_to_monitor(process_name, &pickles))
+        .map(|(pid, process_name)| {
+            (
+                pid,
+                (process_name.clone(), why_monitor(process_name, &pickles)),
+            )
+        })
         .collect();
 
-    println!("{:#?}", monitoring_processes);
-    println!("{:#?}", pickles[0]);
+    return Ok(processes_to_monitor)
+}
 
+fn import_model<'py>(path_to_model: &String, py: Python<'py>) -> PyResult<&'py PyAny> {
+    let joblib = PyModule::import_bound(py, "joblib")?;
+    let total: &PyAny = joblib.getattr("load")?.call1((path_to_model,))?.extract()?;
+    Ok(total)
+}
 
+fn main() -> Result<()> {
+    // the path to config_file is hardcoded
+    let config_file_path =
+        Path::new("/home/prettyroseslover/Sync/4th year/Laurea/cgjail/config/cgjailConfig.toml");
+
+    let config_file = fs::read_to_string(config_file_path)?;
+
+    let config: Config = toml::from_str(&config_file)?;
+
+    // Pickles made by Reliability
+    let entries = fs::read_dir(&config.model_storage)?;
+
+    let filenames: Vec<String> = entries
+        .map(|entry| {
+            Ok(entry?
+                .file_name()
+                .into_string()
+                .map_err(|_| eyre!("os string conversion"))?)
+        })
+        .collect::<Result<_>>()?;
+
+    let pickles: HashMap<usize, String> = filenames
+        .into_iter()
+        .filter(|filename| {
+            Path::new(&filename)
+                .extension()
+                .is_some_and(|ext| ext == OsStr::new("pkl"))
+        })
+        .enumerate()
+        .map(|(i, x)| (i + 1, x))
+        .collect();
+
+    let model_storage_as_string = config
+        .model_storage
+        .into_os_string()
+        .into_string()
+        .map_err(|_| eyre!("model storage path buff to string conversion"))?;
+
+    let models_to_load: HashMap<usize, String> = pickles
+        .iter()
+        .map(|(&id, pickle)| (id, format!("{}/{}", model_storage_as_string, pickle)))
+        .collect();
+
+    // println!("{:#?}", processes_to_monitor);
+    println!("{:#?}", pickles);
+    println!("{:#?}", models_to_load);
+
+    Python::with_gil(|py| -> Result<()> {
+        // import all the existing models once and for all
+        let models: HashMap<usize, &PyAny> = models_to_load
+            .into_iter()
+            .map(|(id, model)| Ok((id, import_model(&model, py)?)))
+            .collect::<PyResult<_>>()?;
+
+        println!("{:#?}", models);
+
+        // for each process to monitor
+
+        loop {
+            let processes_to_monitor = which_to_monitor(&pickles)?;
+            for (pid, (process_name, id)) in processes_to_monitor.into_iter() {
+                println!("{}: {} {}", pid, process_name, id);
+            }
+        }
+
+        Ok(())
+    })?;
+
+    Ok(())
 }
