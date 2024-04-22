@@ -5,7 +5,7 @@ use color_eyre::{eyre::eyre, Report, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::fs;
+use std::{fs, env};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use toml;
@@ -96,8 +96,13 @@ fn import_model<'py>(path_to_model: &String, py: Python<'py>) -> PyResult<&'py P
 
 fn main() -> Result<()> {
     // the path to config_file is hardcoded
-    let config_file_path =
-        Path::new("/home/prettyroseslover/Sync/4th year/Laurea/cgjail/config/cgjailConfig.toml");
+
+    let mut config_file_path = env::current_dir()?;
+    config_file_path.pop();
+    config_file_path.push("config/cgjailConfig.toml");
+    
+    // let config_file_path =
+        // Path::new("/home/prettyroseslover/Sync/4th year/Laurea/cgjail/config/cgjailConfig.toml");
 
     let config_file = fs::read_to_string(config_file_path)?;
 
@@ -137,7 +142,6 @@ fn main() -> Result<()> {
         .map(|(&id, pickle)| (id, format!("{}/{}", model_storage_as_string, pickle)))
         .collect();
 
-    // println!("{:#?}", processes_to_monitor);
     println!("{:#?}", pickles);
     println!("{:#?}", models_to_load);
 
@@ -150,13 +154,26 @@ fn main() -> Result<()> {
 
         println!("{:#?}", models);
 
-        // for each process to monitor
-
+         
+        // unending loop - daemon behaviour
         loop {
             let processes_to_monitor = which_to_monitor(&pickles)?;
+            
+            // loop through every process to monitor
             for (pid, (process_name, id)) in processes_to_monitor.into_iter() {
                 println!("{}: {} {}", pid, process_name, id);
+
+                /*
+                1. gather info using metrics --> pass PID!
+                2. model.predict() to know whether the process is behaving abnormally --> pass the MODEL itself
+                3. return the result 
+                */
+
+
+
+
             }
+
         }
 
         Ok(())
