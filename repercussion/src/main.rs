@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use toml;
 
 use pyo3::prelude::*;
-use pyo3::types::PyAny;
+use pyo3::types::{PyAny, PyList};
 
 #[derive(Deserialize, Debug)]
 struct Config {
@@ -145,6 +145,11 @@ fn main() -> Result<()> {
     println!("{:#?}", pickles);
     println!("{:#?}", models_to_load);
 
+    let mut python_path = env::current_dir()?;
+    python_path.push("predict.py");
+
+    let py_app = fs::read_to_string(&python_path)?;
+
     Python::with_gil(|py| -> Result<()> {
         // import all the existing models once and for all
         let models: HashMap<usize, &PyAny> = models_to_load
@@ -154,26 +159,28 @@ fn main() -> Result<()> {
 
         println!("{:#?}", models);
 
-         
         // unending loop - daemon behaviour
         loop {
             let processes_to_monitor = which_to_monitor(&pickles)?;
+
+            let syspath = py
+                .import_bound("sys")?
+                .getattr("path")?
+                .downcast_into::<PyList>().map_err(|e| eyre!("{}", e))?;
+            syspath.insert(0, &python_path)?;
             
             // loop through every process to monitor
             for (pid, (process_name, id)) in processes_to_monitor.into_iter() {
                 println!("{}: {} {}", pid, process_name, id);
 
-                /*
-                1. gather info using metrics --> pass PID!
-                2. model.predict() to know whether the process is behaving abnormally --> pass the MODEL itself
-                3. return the result 
-                */
-
-
-
-
+                let app: Py<PyAny> = PyModule::from_code_bound(py, &py_app, "", "")?
+                    .getattr("predict")?
+                    .into();
+                let result = app.call1(py, (pid, models[&id]))?.extract::<&PyAny>(py)?;
+                println!("{:#?}", result);
             }
-
+            // for testing only run once
+            break
         }
 
         Ok(())
