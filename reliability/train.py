@@ -13,7 +13,7 @@ def k_neigh(n):
 
 class Model:
     def __init__(self, input, path_to_storage, K=None):
-        df = pd.read_csv(input, index_col = 0)
+        df = pd.read_csv(input)
         X = df.loc[:, df.columns!='process_class']
         y = df['process_class']
         self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(X, y, test_size = 0.2, random_state=0)
