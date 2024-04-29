@@ -167,7 +167,7 @@ fn main() -> Result<()> {
                 .import_bound("sys")?
                 .getattr("path")?
                 .downcast_into::<PyList>().map_err(|e| eyre!("{}", e))?;
-            syspath.insert(0, &python_path)?;
+            syspath.insert(0, &python_path.parent().map(|p| p.parent()))?;
             
             // loop through every process to monitor
             for (pid, (process_name, id)) in processes_to_monitor.into_iter() {
