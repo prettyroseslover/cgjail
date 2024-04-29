@@ -15,6 +15,6 @@ def current_metrics(pid):
 
 def predict(pid, knn_model):
     df = pd.DataFrame(current_metrics(pid))
-    return knn_model.predict(df)
+    return knn_model.predict(df)[0]
 
 

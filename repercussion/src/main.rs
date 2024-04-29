@@ -176,7 +176,7 @@ fn main() -> Result<()> {
                 let app: Py<PyAny> = PyModule::from_code_bound(py, &py_app, "", "")?
                     .getattr("predict")?
                     .into();
-                let result = app.call1(py, (pid, models[&id]))?.extract::<&PyAny>(py)?;
+                let result = app.call1(py, (pid, models[&id]))?.extract::<u32>(py)?;
                 println!("{:#?}", result);
             }
             // for testing only run once
