@@ -1,5 +1,4 @@
 cgjailConfig.toml
 models/
 __pycache__/
-Cargo.lock
 target/
