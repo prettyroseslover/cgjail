@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![allow(unused_imports)]
 
 use color_eyre::{eyre::eyre, Report, Result};
 use serde::Deserialize;
@@ -13,12 +14,15 @@ use toml;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyList};
 
+use cgroups_rs::*;
+use cgroups_rs::cgroup_builder::*;
+
 #[derive(Deserialize, Debug)]
 struct Config {
     model_storage: PathBuf,
 }
 
-fn process_name(pid: u32) -> Result<String> {
+fn process_name(pid: u64) -> Result<String> {
     let file = fs::File::open(format!("/proc/{}/status", pid))?;
     let mut buffer = BufReader::new(file);
     let mut first_line = String::new();
@@ -55,7 +59,7 @@ fn why_monitor(process: String, pattern: &HashMap<usize, String>) -> usize {
     return 0;
 }
 
-fn which_to_monitor(pickles: &HashMap<usize, String>) -> Result<HashMap<u32, (String, usize)>> {
+fn which_to_monitor(pickles: &HashMap<usize, String>) -> Result<HashMap<u64, (String, usize)>> {
     let entries: Vec<String> = fs::read_dir("/proc")?
         .map(|e| {
             Ok(e?
@@ -66,14 +70,14 @@ fn which_to_monitor(pickles: &HashMap<usize, String>) -> Result<HashMap<u32, (St
         .collect::<Result<_>>()?;
 
     // entries -> filter whether a number -> turn into a vec of pids
-    let running_processes: Vec<u32> = entries
+    let running_processes: Vec<u64> = entries
         .iter()
-        .filter(|file| file.parse::<u32>().is_ok())
-        .map(|pid| pid.parse::<u32>().unwrap())
+        .filter(|file| file.parse::<u64>().is_ok())
+        .map(|pid| pid.parse::<u64>().unwrap())
         .collect();
 
     // map (pid: name) of processes to actually monitor
-    let processes_to_monitor: HashMap<u32, (String, usize)> = running_processes
+    let processes_to_monitor: HashMap<u64, (String, usize)> = running_processes
         .iter()
         .flat_map(|&pid| Ok::<_, Report>((pid, process_name(pid)?)))
         .filter(|(pid, process_name)| whether_to_monitor(process_name, &pickles))
@@ -101,9 +105,6 @@ fn main() -> Result<()> {
     config_file_path.pop();
     config_file_path.push("config/cgjailConfig.toml");
     
-    // let config_file_path =
-        // Path::new("/home/prettyroseslover/Sync/4th year/Laurea/cgjail/config/cgjailConfig.toml");
-
     let config_file = fs::read_to_string(config_file_path)?;
 
     let config: Config = toml::from_str(&config_file)?;
@@ -157,8 +158,6 @@ fn main() -> Result<()> {
             .map(|(id, model)| Ok((id, import_model(&model, py)?)))
             .collect::<PyResult<_>>()?;
 
-        println!("{:#?}", models);
-
         // unending loop - daemon behaviour
         loop {
             let processes_to_monitor = which_to_monitor(&pickles)?;
@@ -177,7 +176,40 @@ fn main() -> Result<()> {
                     .getattr("predict")?
                     .into();
                 let result = app.call1(py, (pid, models[&id]))?.extract::<u32>(py)?;
-                println!("{:#?}", result);
+                
+                if result == 1 {
+                    let jail_name = format!("{}_jail", process_name);
+
+                    let cpu_usage_quota = models[&id].getattr("cpu_usage_quota")?.extract::<i64>()?;
+                    let mem_max_bytes = models[&id].getattr("mem_max_bytes")?.extract::<i64>()?;
+                    let maximum_number_of_processes = models[&id].getattr("maximum_number_of_processes")?.extract::<i64>()?;
+                    
+                    // get hierarchy (V2 or V1)
+                    let hier = cgroups_rs::hierarchies::auto();
+
+                    // creation of a cgroup wuth given limits
+                    let cgjail: Cgroup = CgroupBuilder::new(&jail_name)
+                        .memory()
+                            .memory_hard_limit(mem_max_bytes) // limit is i64, bytes
+                            .done()
+                        .cpu()
+                            .quota(cpu_usage_quota) // quota is i64
+                            .done()
+                        .pid()
+                            .maximum_number_of_processes(MaxValue::Value(maximum_number_of_processes)) // value is i64
+                            .done()
+                        .build(hier)?;
+                    
+                    let cpus: &cgroups_rs::cpu::CpuController = cgjail.controller_of().ok_or(eyre!("Something went wrong in a CpuController"))?;
+                    cpus.add_task_by_tgid(&CgroupPid::from(pid))?;
+                    
+                    let memories: &cgroups_rs::memory::MemController = cgjail.controller_of().ok_or(eyre!("Something went wrong in a MemController"))?;
+                    memories.add_task(&CgroupPid::from(pid))?;
+
+                    let pids: &cgroups_rs::pid::PidController = cgjail.controller_of().ok_or(eyre!("Something went wrong in a PidController"))?;
+                    pids.add_task(&CgroupPid::from(pid))?;
+
+                }
             }
             // for testing only run once
             break
