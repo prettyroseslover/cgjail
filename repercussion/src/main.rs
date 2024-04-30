@@ -222,9 +222,9 @@ fn main() -> Result<()> {
                 let app: Py<PyAny> = PyModule::from_code_bound(py, &py_app, "", "")?
                     .getattr("predict")?
                     .into();
-                let result = app.call1(py, (pid, models[&id]))?.extract::<u32>(py)?;
+                let sentence: u32 = app.call1(py, (pid, models[&id]))?.extract::<u32>(py)?;
 
-                if result == 1 {
+                if sentence == 1 {
                     println!("Process {} {} is naughty", pid, process_name);
                     cgjail(pid, process_name, id, &models)?;
                 }
