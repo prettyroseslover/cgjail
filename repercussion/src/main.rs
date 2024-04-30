@@ -19,6 +19,7 @@ use pyo3::{
 #[derive(Deserialize, Debug)]
 struct Config {
     model_storage: PathBuf,
+    debug: bool,
 }
 
 fn process_name(pid: u64) -> Result<String> {
@@ -30,7 +31,7 @@ fn process_name(pid: u64) -> Result<String> {
         .split_whitespace()
         .collect::<Vec<&str>>()
         .get(1)
-        .ok_or(eyre!("no process name"))?
+        .ok_or(eyre!("No process name"))?
         .to_string();
     Ok(process_name)
 }
@@ -64,7 +65,7 @@ fn which_to_monitor(pickles: &HashMap<usize, String>) -> Result<HashMap<u64, (St
             Ok(e?
                 .file_name()
                 .into_string()
-                .map_err(|_| eyre!("entries from /proc"))?)
+                .map_err(|_| eyre!("Entries from /proc"))?)
         })
         .collect::<Result<_>>()?;
 
@@ -79,7 +80,7 @@ fn which_to_monitor(pickles: &HashMap<usize, String>) -> Result<HashMap<u64, (St
     let processes_to_monitor: HashMap<u64, (String, usize)> = running_processes
         .iter()
         .flat_map(|&pid| Ok::<_, Report>((pid, process_name(pid)?)))
-        .filter(|(pid, process_name)| whether_to_monitor(process_name, &pickles))
+        .filter(|(_pid, process_name)| whether_to_monitor(process_name, &pickles))
         .map(|(pid, process_name)| {
             (
                 pid,
@@ -142,7 +143,6 @@ fn cgjail(pid: u64, process_name: String, id: usize, models: &HashMap<usize, &Py
 
 fn main() -> Result<()> {
     // the path to config_file is hardcoded
-
     let mut config_file_path = env::current_dir()?;
     config_file_path.pop();
     config_file_path.push("config/cgjailConfig.toml");
@@ -159,7 +159,7 @@ fn main() -> Result<()> {
             Ok(entry?
                 .file_name()
                 .into_string()
-                .map_err(|_| eyre!("os string conversion"))?)
+                .map_err(|_| eyre!("OS string conversion"))?)
         })
         .collect::<Result<_>>()?;
 
@@ -178,15 +178,16 @@ fn main() -> Result<()> {
         .model_storage
         .into_os_string()
         .into_string()
-        .map_err(|_| eyre!("model storage path buff to string conversion"))?;
+        .map_err(|_| eyre!("Model storage path buff to string conversion"))?;
 
     let models_to_load: HashMap<usize, String> = pickles
         .iter()
         .map(|(&id, pickle)| (id, format!("{}/{}", model_storage_as_string, pickle)))
         .collect();
 
-    // println!("{:#?}", pickles);
-    // println!("{:#?}", models_to_load);
+    if config.debug {
+        println!("All the pickeles:\n{:#?}", pickles);
+    }
 
     let mut python_path = env::current_dir()?;
     python_path.push("predict.py");
@@ -213,7 +214,10 @@ fn main() -> Result<()> {
 
             // loop through every process to monitor
             for (pid, (process_name, id)) in processes_to_monitor.into_iter() {
-                println!("{}: {} {}", pid, process_name, id);
+                
+                if config.debug {
+                    println!("Process {}: {} {}", pid, process_name, id);
+                }
 
                 let app: Py<PyAny> = PyModule::from_code_bound(py, &py_app, "", "")?
                     .getattr("predict")?
@@ -221,11 +225,14 @@ fn main() -> Result<()> {
                 let result = app.call1(py, (pid, models[&id]))?.extract::<u32>(py)?;
 
                 if result == 1 {
+                    println!("Process {} {} is naughty", pid, process_name);
                     cgjail(pid, process_name, id, &models)?;
                 }
             }
             // for testing only run once
-            break;
+            if config.debug {
+                break;
+            }
         }
 
         Ok(())
