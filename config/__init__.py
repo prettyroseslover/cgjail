@@ -31,3 +31,11 @@ if not Path(path_to_storage).exists():
 if not os.access(path_to_storage, os.W_OK):
     colored.print_red(f"Can not write to {path_to_storage}")
     exit()
+
+try: 
+    debug = parsed_config["debug"]
+
+except Exception as ex:
+    colored.print_red("Config file must define debug variable")
+    exit()
+    

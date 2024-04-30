@@ -49,8 +49,6 @@ def odd(x):
 
 parser = CustomArgumentParser(description='Script to prepare data and train kNN-model for a given piece of software')
 
-parser.add_argument('-v', '--verbosity', action = "store_true")
-
 subparsers = parser.add_subparsers(dest='step', required=True)
 
 docile_parser = subparsers.add_parser('docile')
@@ -68,9 +66,8 @@ naughty_parser.add_argument('-o', '--output', required=True, type=csv_file, help
 
 train_parser.add_argument('-i', '--input', required=True, type=csv_file, help='CSV file to train a model')
 train_parser.add_argument('-k', '--k-neighbour', default=None, type=odd, help='Odd number of K nearest neightbours')
+train_parser.add_argument('-c', '--clean', action = "store_true")
 
 args = parser.parse_args()
-
-verbose = args.verbosity
 
 

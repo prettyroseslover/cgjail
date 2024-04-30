@@ -1,10 +1,10 @@
-import sys
+import sys, os
 sys.path.insert(0, '../') # how to beautify that? 
-from parse import verbose, args
-from config import path_to_storage
+from parse import args
+from config import path_to_storage, debug
 from colored_text import colored
 
-if verbose:
+if debug:
     colored.print_cyan(f"==ON THE {args.step.upper()} STEP==")
 
 if args.step == 'train':
@@ -13,8 +13,10 @@ if args.step == 'train':
     K = args.k_neighbour
     kNN = Model(input, path_to_storage, K)
     kNN.train_and_save()
-    if verbose:
+    if debug:
         colored.print_cyan(kNN.quality())
+    if args.clean: 
+        os.remove(input)
     exit()
 
 process_class = int(args.step != 'docile')
@@ -25,14 +27,14 @@ number = args.number
 with open(f"/proc/{pid}/status") as f:
     process_name = f.readline().strip('\n').split(":\t")[1]
 
-if verbose:
+if debug:
     colored.print_cyan("You've chosen process:")
     colored.print_cyan(f"{pid} {process_name}")
 
 from gather import df_generator
 df = df_generator(pid, number, period, process_class)
 
-if verbose:
+if debug:
     print(df.head())
 
 if args.step == 'naughty':
