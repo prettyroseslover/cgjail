@@ -12,8 +12,7 @@ use toml;
 
 use cgroups_rs::{cgroup_builder::*, *};
 use pyo3::{
-    prelude::*,
-    types::{PyAny, PyList},
+    exceptions::PyKeyboardInterrupt, prelude::*, types::{PyAny, PyList}
 };
 
 #[derive(Deserialize, Debug)]
@@ -202,7 +201,7 @@ fn main() -> Result<()> {
             .collect::<PyResult<_>>()?;
 
         // unending loop - daemon behaviour
-        loop {
+        'outer: loop {
             let processes_to_monitor = which_to_monitor(&pickles)?;
 
             let syspath = py
@@ -223,19 +222,30 @@ fn main() -> Result<()> {
                     .getattr("predict")?
                     .into();
 
-                let try_call = || -> Result<()> {
-                    let sentence: u32 = app.call1(py, (pid, models[&id]))?.extract::<u32>(py)?;
+                let try_call = || -> Result<bool> {
+                    
+                    let try_sentence = app.call1(py, (pid, models[&id]));
+                    let try_sentence = match try_sentence {
+                        Err(e) if e.is_instance_of::<PyKeyboardInterrupt>(py) =>
+                         return Ok(true),
+                         Err(e) => return Err(Report::new(e)),
+                         Ok(a) => a,
+                    };
+
+                    let sentence = try_sentence.bind(py).extract::<u32>()?;
 
                     if sentence == 1 {
                         println!("Process {} {} is naughty", pid, process_name);
                         cgjail(pid, process_name, id, &models)?;
                     }
-                    Ok(())
+                    Ok(false)
                 }();
-
-                if let Err(e) = try_call {
-                    println!("Error handling process {}: {}", pid, e);
+                match try_call {
+                    Ok(true) => break 'outer,
+                    Err(e) => println!("Error handling process {}: {}", pid, e),
+                    _ => (),
                 }
+        
             }
             // for testing only run once
             if config.debug {
