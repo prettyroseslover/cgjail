@@ -2,3 +2,4 @@ cgjailConfig.toml
 models/
 __pycache__/
 target/
+cgjail.service
