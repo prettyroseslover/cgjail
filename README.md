@@ -5,12 +5,12 @@
 ```mermaid
 sequenceDiagram
   actor A as Администратор
-    box rgb(91, 179, 116) Доверенная среда
+    box  Доверенная среда
   participant R as Модуль доверенной среды
     end
     participant F as procfs
     participant fs as Хранилище
-    box rgb(154, 149, 199) Среда реагирования
+    box Среда реагирования
   participant r as Модуль реагирования
     end
     
